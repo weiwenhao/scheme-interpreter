@@ -7,6 +7,7 @@
         ((quoted? exp) (analyze-quoted exp))
         ((variable? exp) (analyze-variable exp))
         ((assignment? exp) (analyze-assignment exp))
+        ((definition? exp) (analyze-definition exp))
         ((if? exp) (analyze-if exp))
         ((lambda? exp) (analyze-lambda exp))
         ((begin? exp) (analyze-sequence (begin-actions exp)))
@@ -15,6 +16,7 @@
         (else
          (error "Unknown expression type -- ANALYZE" exp))))
 
+; 分析阶段
 (define (analyze-self-evaluating exp)
   (lambda (env) exp))
 
@@ -32,7 +34,7 @@
       (set-variable-value! var (vproc env) env)
       'ok)))
 
-(define (analyze-assignment exp)
+(define (analyze-definition exp)
   (let ((var (definition-variable exp))
         (vproc (analyze (definition-value exp))))
     (lambda (env)
@@ -42,7 +44,7 @@
 (define (analyze-if exp)
   (let ((pproc (analyze (if-predicate exp)))
         (cproc (analyze (if-consequent exp)))
-        (aproc (analyze (if-consequent exp))))
+        (aproc (analyze (if-alternative exp))))
     (lambda (env)
       (if (true? (pproc env))
           (cproc env)
@@ -87,6 +89,10 @@
          (error
           "Unknown procedure type -- EXECUTE-APPLICATION"
           proc))))
+
+(define (amb? exp) (tagged-list? exp 'amb))
+
+(define (amb-choices exp) (cdr exp))
 
 
 (define (list-of-values exps env)
@@ -371,6 +377,7 @@
         (list 'pair? pair?)
         (list 'display display)
         (list '> >)
+        (list '< <)
         (list 'eq? eq?)
         (list '* *)
         (list '- -)
