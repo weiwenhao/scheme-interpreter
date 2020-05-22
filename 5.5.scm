@@ -293,4 +293,65 @@
             (list-union (registers-needs seq1) ; 需要的寄存器集合,
                        ; 被序列 1 修改过的寄存器就已经被隐式初始化了，所以要从 seq2.needed 中过滤掉
                        (list-difference (registers-needed seq2)
-                                        (registers-modifies seq1)))))) 
+                                        (registers-modified seq1)))
+            (list-unon (registers-modified seq1)
+                       (registers-modified seq2))
+            (append (statements seq1) (statements seq2))))
+    (define (append-seq-list seqs)
+        (if (null? seqs)
+            (empty-instruction-sequence)
+            (append-2-sequences (car seqs)
+                                (append-seq-list (cdr seqs)))))
+    (append-seq-list seqs))
+
+
+(define (list-union s1 s2)
+    (cond [(null? s1) s2]
+          [(memq (car s1) (list-union (cdr s1) s2))]
+          [else (cons (car s1) (list-union (cdr s1) s2))]))
+
+(define (list-difference s1 s2)
+    (cond [(null? s1) '()]
+          [(memq (car s1) s2) (list-difference (cdr s1) s2)]
+          [else (cons (cdr s1) (list-difference (cdr s1) s2))]))
+
+
+
+
+(define (preserving regs seq1 seq2)
+    (if (null? regs)
+        (append-instruction-sequences seq1 seq2)
+        (let ([first-reg (car regs)]) 
+            (if (and (needs-register? seq2 first-reg)
+                     (modifies-register? seq1 first-reg))
+                (preserving 
+                    (cdr regs)
+                    (make-instruction-sequence
+                        ; seq1 需要添加 save first-reg, 所以添加 first-reg 到 registers-needed 中
+                        (list-union (list first-reg)
+                                    (registers-needed seq1))
+                        (list-difference (registers-modified seq1)
+                                         (list first-reg))
+                        (append '([save ,first-reg])
+                                (statements seq1)
+                                '([restore ,first-reg])))
+                    seq2)
+                (preserving (cdr regs) seq1 seq2))))
+
+
+; 这里对寄存器各种修改，添加的分析都是为了 preserving 中的方便 save 和 restore ?
+(define (tack-on-instruction-sequence seq body-seq)
+    (make-instruction-sequence
+        (registers-needed seq)
+        (registers-modified seq)
+        (append (statements seq) (statements body-seq))))
+
+
+; 合成后的指令序列  seq1 或者 seq2 都可能被执行到
+; 所以组合后的指令序列的寄存器应该是 seq1 和 seq2 的寄存器的并集
+(define (parallel-instruction-sequences seq1 seq2)
+    (make-instruction-sequence
+        (list-union (registers-needed seq1) (registers-needed seq2))
+        (list-union (registers-modified seq1) (registers-modified seq2))))
+
+
